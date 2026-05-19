@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<title>Oven PID Dashboard</title>
+
+<link rel="stylesheet" href="style.css">
+
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>PID Oven Dashboard</h1>
+
+<div class="grid">
+
+<div class="card suhu">
+<h2>Temperature</h2>
+<div class="value"
+id="suhu">0</div>
+<div class="unit">°C</div>
+</div>
+
+<div class="card hum">
+<h2>Humidity</h2>
+<div class="value"
+id="hum">0</div>
+<div class="unit">%</div>
+</div>
+
+<div class="card output">
+<h2>Dimmer Output</h2>
+<div class="value"
+id="output">0</div>
+<div class="unit">%</div>
+</div>
+
+<div class="card relay">
+<h2>Relay</h2>
+<div class="relay-status"
+id="relay">OFF</div>
+
+<div class="btn-group">
+
+<button class="on"
+onclick="relayOn()">
+ON
+</button>
+
+<button class="off"
+onclick="relayOff()">
+OFF
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
