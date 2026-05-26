@@ -1,4 +1,4 @@
-// MQTT Configuration
+// ======================= MQTT SETUP =======================
 const mqttHost = "wss://5c198e003ef24474bbec3b3d471414cc.s1.eu.hivemq.cloud:8884/mqtt";
 const mqttUser = "Fermentasi_Tempe";
 const mqttPass = "Tempepastijadi@26";
@@ -10,20 +10,26 @@ const client = mqtt.connect(mqttHost, {
   reconnectPeriod: 3000
 });
 
-// Variables
+// Variabel untuk menyimpan data
 let currentSuhu = 35.0;
 let currentHum = 51.0;
 let currentDimmer = 0;
 let currentRelay = "OFF";
+let currentSisa = 0;
+let currentMenit = 0;
+let currentDetik = 0;
+let currentProses = "AKTIF";
 
-// Chart data
+// Data untuk grafik
 let timeLabels = [];
 let temperatureData = [];
 let dataTimestamps = [];
-let currentTimeRange = 360;
+let currentTimeRange = 360; // menit, default 6 jam
+
+// Chart instance
 let temperatureChart = null;
 
-// DOM Elements
+// Elemen DOM
 const suhuSpan = document.getElementById("suhuValue");
 const humSpan = document.getElementById("humValue");
 const dimmerSpan = document.getElementById("dimmerValue");
@@ -35,30 +41,111 @@ const humidifierStateSpan = document.getElementById("humidifierState");
 const mqttStatusSpan = document.getElementById("mqttStatus");
 const faseTextSpan = document.getElementById("faseText");
 const countdownTimerSpan = document.getElementById("countdownTimer");
-const waktuProsesSpan = document.getElementById("waktuProses");
 const maxTempSpan = document.getElementById("maxTemp");
 const minTempSpan = document.getElementById("minTemp");
 const avgTempSpan = document.getElementById("avgTemp");
 
-// Initialize Chart
+// Inisialisasi grafik
 function initChart() {
   const ctx = document.getElementById('temperatureChart').getContext('2d');
+  
   temperatureChart = new Chart(ctx, {
     type: 'line',
-    data: { labels: [], datasets: [{ label: 'Suhu (°C)', data: [], borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, pointRadius: 3, tension: 0.3, fill: true }] },
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Suhu (°C)',
+        data: [],
+        borderColor: '#f97316',
+        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+        borderWidth: 3,
+        pointRadius: 4,
+        pointBackgroundColor: '#facc15',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        tension: 0.3,
+        fill: true
+      }]
+    },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#eef2ff' } } },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#eef2ff',
+            font: { size: 12 }
+          }
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          backgroundColor: '#1e293b',
+          titleColor: '#facc15',
+          bodyColor: '#eef2ff'
+        }
+      },
       scales: {
-        x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
-        y: { min: 20, max: 45, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+        x: {
+          title: {
+            display: true,
+            text: 'Waktu',
+            color: '#94a3b8'
+          },
+          ticks: {
+            color: '#94a3b8',
+            maxRotation: 45,
+            autoSkip: true,
+            maxTicksLimit: 10
+          },
+          grid: {
+            color: '#334155'
+          }
+        },
+        y: {
+          title: {
+            display: true,
+            text: 'Suhu (°C)',
+            color: '#94a3b8'
+          },
+          ticks: {
+            color: '#94a3b8'
+          },
+          grid: {
+            color: '#334155'
+          },
+          min: 20,
+          max: 45
+        }
+      },
+      interaction: {
+        mode: 'nearest',
+        axis: 'x',
+        intersect: false
       }
     }
   });
 }
 
-// Add data to chart
+// Update statistik suhu
+function updateTemperatureStats() {
+  if (temperatureData.length === 0) {
+    maxTempSpan.innerText = '--';
+    minTempSpan.innerText = '--';
+    avgTempSpan.innerText = '--';
+    return;
+  }
+  
+  const maxTemp = Math.max(...temperatureData);
+  const minTemp = Math.min(...temperatureData);
+  const avgTemp = temperatureData.reduce((a, b) => a + b, 0) / temperatureData.length;
+  
+  maxTempSpan.innerText = `${maxTemp.toFixed(1)}°C`;
+  minTempSpan.innerText = `${minTemp.toFixed(1)}°C`;
+  avgTempSpan.innerText = `${avgTemp.toFixed(1)}°C`;
+}
+
+// Tambah data ke grafik
 function addDataToChart(suhu) {
   const now = new Date();
   const timeString = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -67,6 +154,7 @@ function addDataToChart(suhu) {
   temperatureData.push(suhu);
   dataTimestamps.push(now.getTime());
   
+  // Hapus data yang lebih tua dari time range
   const cutoffTime = now.getTime() - (currentTimeRange * 60 * 1000);
   while (dataTimestamps.length > 0 && dataTimestamps[0] < cutoffTime) {
     timeLabels.shift();
@@ -74,69 +162,109 @@ function addDataToChart(suhu) {
     dataTimestamps.shift();
   }
   
+  // Update chart
   temperatureChart.data.labels = timeLabels;
   temperatureChart.data.datasets[0].data = temperatureData;
   temperatureChart.update();
-  updateStats();
+  
+  // Update statistik
+  updateTemperatureStats();
 }
 
-// Update statistics
-function updateStats() {
-  if (temperatureData.length === 0) return;
-  const maxTemp = Math.max(...temperatureData);
-  const minTemp = Math.min(...temperatureData);
-  const avgTemp = temperatureData.reduce((a, b) => a + b, 0) / temperatureData.length;
-  maxTempSpan.innerText = `${maxTemp.toFixed(1)}°C`;
-  minTempSpan.innerText = `${minTemp.toFixed(1)}°C`;
-  avgTempSpan.innerText = `${avgTemp.toFixed(1)}°C`;
-}
-
-// Change time range
+// Ubah range waktu
 function changeTimeRange(minutes) {
   currentTimeRange = minutes;
-  document.querySelectorAll('.chart-btn').forEach(btn => btn.classList.remove('active'));
-  if (event && event.target) event.target.classList.add('active');
   
+  // Update active button style
+  const buttons = document.querySelectorAll('.chart-btn');
+  buttons.forEach(btn => {
+    btn.classList.remove('active');
+  });
+  if (event && event.target) {
+    event.target.classList.add('active');
+  }
+  
+  // Filter data berdasarkan range baru
   const now = Date.now();
   const cutoffTime = now - (currentTimeRange * 60 * 1000);
-  const newLabels = [], newData = [], newTimestamps = [];
+  
+  const newTimeLabels = [];
+  const newTemperatureData = [];
+  const newTimestamps = [];
   
   for (let i = 0; i < dataTimestamps.length; i++) {
     if (dataTimestamps[i] >= cutoffTime) {
-      newLabels.push(timeLabels[i]);
-      newData.push(temperatureData[i]);
+      newTimeLabels.push(timeLabels[i]);
+      newTemperatureData.push(temperatureData[i]);
       newTimestamps.push(dataTimestamps[i]);
     }
   }
   
-  timeLabels = newLabels;
-  temperatureData = newData;
+  timeLabels = newTimeLabels;
+  temperatureData = newTemperatureData;
   dataTimestamps = newTimestamps;
+  
   temperatureChart.data.labels = timeLabels;
   temperatureChart.data.datasets[0].data = temperatureData;
   temperatureChart.update();
-  updateStats();
+  
+  updateTemperatureStats();
 }
 
-// Format time HH:MM:SS
-function formatTime(h, m, s) {
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+// Update countdown dari data ESP32
+function updateCountdown(sisaDetik, menit, detik, proses) {
+  currentProses = proses;
+  
+  if (proses === "SELESAI" || sisaDetik <= 0) {
+    faseTextSpan.innerHTML = `Fermentasi Selesai <i class="fas fa-check-circle"></i>`;
+    faseTextSpan.style.color = "#4ade80";
+    countdownTimerSpan.innerHTML = "00:00";
+    return;
+  }
+  
+  // Gunakan data menit dan detik dari ESP32
+  if (menit !== undefined && detik !== undefined) {
+    countdownTimerSpan.innerHTML = `${menit.toString().padStart(2, '0')}:${detik.toString().padStart(2, '0')}`;
+  } else {
+    // Fallback jika hanya sisa detik
+    const m = Math.floor(sisaDetik / 60);
+    const d = sisaDetik % 60;
+    countdownTimerSpan.innerHTML = `${m.toString().padStart(2, '0')}:${d.toString().padStart(2, '0')}`;
+  }
+  
+  faseTextSpan.innerHTML = `Fermentasi (Aktif) <i class="fas fa-seedling"></i>`;
+  faseTextSpan.style.color = "";
 }
 
-// Update dashboard
-function updateDashboard(suhu, hum, dimmer, relay, sisaH, sisaM, sisaD, prosesH, prosesM, prosesD, prosesStatus) {
+// Fungsi update tampilan utama
+function updateDashboard(suhu, hum, dimmer, relay, sisa, menit, detik, proses) {
+  // Update suhu
   suhuSpan.innerText = suhu.toFixed(1);
+  
+  // Update kelembapan
   humSpan.innerText = Math.floor(hum);
+  
+  // Update dimmer
   dimmerSpan.innerText = Math.floor(dimmer);
-  dimmerBar.style.width = `${Math.min(100, Math.max(0, dimmer))}%`;
+  const dimmerPercent = Math.min(100, Math.max(0, dimmer));
+  dimmerBar.style.width = `${dimmerPercent}%`;
   
-  // Dimmer status
-  if (dimmer === 0) dimmerStatusSpan.innerText = "Mati";
-  else if (dimmer <= 30) dimmerStatusSpan.innerText = "Rendah";
-  else if (dimmer <= 70) dimmerStatusSpan.innerText = "Sedang";
-  else dimmerStatusSpan.innerText = "Tinggi";
-  
-  // Temperature status
+  // Update status dimmer
+  if (dimmerPercent === 0) {
+    dimmerStatusSpan.innerText = "Mati";
+    dimmerStatusSpan.style.color = "#f87171";
+  } else if (dimmerPercent <= 30) {
+    dimmerStatusSpan.innerText = "Rendah";
+    dimmerStatusSpan.style.color = "#facc15";
+  } else if (dimmerPercent <= 70) {
+    dimmerStatusSpan.innerText = "Sedang";
+    dimmerStatusSpan.style.color = "#facc15";
+  } else {
+    dimmerStatusSpan.innerText = "Tinggi";
+    dimmerStatusSpan.style.color = "#f97316";
+  }
+
+  // Update status suhu (setpoint 35°C)
   if (suhu >= 34.8 && suhu <= 35.2) {
     suhuStatusSpan.innerText = "Sesuai Setpoint";
     suhuStatusSpan.style.color = "#4ade80";
@@ -147,8 +275,8 @@ function updateDashboard(suhu, hum, dimmer, relay, sisaH, sisaM, sisaD, prosesH,
     suhuStatusSpan.innerText = "Di Atas Setpoint";
     suhuStatusSpan.style.color = "#f97316";
   }
-  
-  // Humidity status
+
+  // Update status kelembapan
   if (hum >= 60 && hum <= 75) {
     humStatusSpan.innerText = "Optimal";
     humStatusSpan.style.color = "#4ade80";
@@ -159,74 +287,157 @@ function updateDashboard(suhu, hum, dimmer, relay, sisaH, sisaM, sisaD, prosesH,
     humStatusSpan.innerText = "Terlalu Lembab";
     humStatusSpan.style.color = "#f87171";
   }
-  
-  // Relay status
-  if (relay === "ON") {
+
+  // Update status relay Humidifier
+  if (relay === "ON" || relay === true || relay === 1) {
     humidifierStateSpan.innerText = "ON";
-    humidifierStateSpan.className = "relay-state relay-on";
+    humidifierStateSpan.classList.add("relay-on");
+    humidifierStateSpan.classList.remove("relay-off");
   } else {
     humidifierStateSpan.innerText = "OFF";
-    humidifierStateSpan.className = "relay-state relay-off";
+    humidifierStateSpan.classList.add("relay-off");
+    humidifierStateSpan.classList.remove("relay-on");
   }
   
-  // Countdown and elapsed time
-  if (prosesStatus === "SELESAI" || (sisaH === 0 && sisaM === 0 && sisaD === 0)) {
-    faseTextSpan.innerHTML = `Fermentasi Selesai <i class="fas fa-check-circle"></i>`;
-    countdownTimerSpan.innerHTML = "00:00:00";
-  } else {
-    faseTextSpan.innerHTML = `Fermentasi (Aktif) <i class="fas fa-seedling"></i>`;
-    countdownTimerSpan.innerHTML = formatTime(sisaH, sisaM, sisaD);
-  }
+  // Update countdown timer
+  updateCountdown(sisa, menit, detik, proses);
   
-  waktuProsesSpan.innerHTML = formatTime(prosesH, prosesM, prosesD);
+  // Tambahkan data ke grafik
   addDataToChart(suhu);
 }
 
-// Real time clock
+// Update jam real-time
 function updateRealTimeClock() {
   const now = new Date();
   const days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-  const dateStr = `${days[now.getDay()]}, ${now.getDate()} ${now.toLocaleString('id-ID', { month: 'short' }).toUpperCase()} ${now.getFullYear()} - ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-  document.getElementById("liveDateTime").innerText = dateStr;
+  const dayName = days[now.getDay()];
+  const tanggal = now.getDate();
+  const bulan = now.toLocaleString('id-ID', { month: 'short' }).toUpperCase();
+  const tahun = now.getFullYear();
+  let jam = now.getHours().toString().padStart(2, '0');
+  let menit = now.getMinutes().toString().padStart(2, '0');
+  let detik = now.getSeconds().toString().padStart(2, '0');
+  const dateTimeString = `${dayName}, ${tanggal} ${bulan} ${tahun} - ${jam}:${menit}:${detik}`;
+  document.getElementById("liveDateTime").innerText = dateTimeString;
 }
 
-// MQTT Events
+// MQTT Event handler
 client.on("connect", () => {
-  console.log("MQTT Connected");
+  console.log("MQTT Connected ke HiveMQ Cloud");
   mqttStatusSpan.innerHTML = '<i class="fas fa-circle"></i> ONLINE';
   mqttStatusSpan.style.background = "#15803d";
-  client.subscribe("oven/data");
+  
+  client.subscribe("oven/data", (err) => {
+    if (!err) console.log("Subscribe ke oven/data");
+  });
 });
 
-client.on("error", () => {
+client.on("error", (err) => {
+  console.error("MQTT error", err);
   mqttStatusSpan.innerHTML = '<i class="fas fa-circle"></i> OFFLINE';
   mqttStatusSpan.style.background = "#b91c1c";
 });
 
 client.on("message", (topic, message) => {
   try {
-    const data = JSON.parse(message.toString());
+    let payloadStr = message.toString();
+    console.log("Received:", payloadStr); // Untuk debugging
+    
+    let data = JSON.parse(payloadStr);
+    
+    // Ambil data dari payload ESP32
+    let suhu = parseFloat(data.suhu);
+    let hum = parseFloat(data.hum);
+    let output = parseFloat(data.output);
+    let relay = data.relay;
+    let sisa = parseInt(data.sisa);
+    let menit = parseInt(data.menit);
+    let detik = parseInt(data.detik);
+    let proses = data.proses;
+    
+    // Validasi data
+    if (!isNaN(suhu) && suhu >= 0 && suhu <= 60) currentSuhu = suhu;
+    if (!isNaN(hum) && hum >= 0 && hum <= 100) currentHum = hum;
+    if (!isNaN(output) && output >= 0 && output <= 100) currentDimmer = output;
+    if (relay) currentRelay = relay;
+    if (!isNaN(sisa)) currentSisa = sisa;
+    if (!isNaN(menit)) currentMenit = menit;
+    if (!isNaN(detik)) currentDetik = detik;
+    if (proses) currentProses = proses;
+    
+    // Update dashboard
     updateDashboard(
-      parseFloat(data.suhu) || 35,
-      parseFloat(data.hum) || 51,
-      parseFloat(data.output) || 0,
-      data.relay || "OFF",
-      parseInt(data.sisaJam) || 0,
-      parseInt(data.sisaMenit) || 0,
-      parseInt(data.sisaDetik) || 0,
-      parseInt(data.prosesJam) || 0,
-      parseInt(data.prosesMenit) || 0,
-      parseInt(data.prosesDetik) || 0,
-      data.proses || "AKTIF"
+      currentSuhu, 
+      currentHum, 
+      currentDimmer, 
+      currentRelay, 
+      currentSisa, 
+      currentMenit, 
+      currentDetik, 
+      currentProses
     );
-  } catch(e) { console.log("Error:", e); }
+    
+  } catch (e) {
+    console.warn("Parse error:", e);
+  }
 });
 
-// Relay control
-function relayOn() { client.publish("oven/relay", "ON"); }
-function relayOff() { client.publish("oven/relay", "OFF"); }
+// Relay Control
+function relayOn() {
+  client.publish("oven/relay", "ON");
+  console.log("Relay ON command sent - Humidifier Aktif");
+}
 
-// Initialize
+function relayOff() {
+  client.publish("oven/relay", "OFF");
+  console.log("Relay OFF command sent - Humidifier Mati");
+}
+
+// Fallback simulasi jika koneksi gagal
+function fallbackSimulation() {
+  let simulasiSisa = 900; // 15 menit simulasi
+  setInterval(() => {
+    if (!client.connected) {
+      // Simulasi countdown
+      if (simulasiSisa > 0) {
+        simulasiSisa--;
+        const m = Math.floor(simulasiSisa / 60);
+        const d = simulasiSisa % 60;
+        updateCountdown(simulasiSisa, m, d, "AKTIF");
+      } else {
+        updateCountdown(0, 0, 0, "SELESAI");
+      }
+      
+      // Simulasi sensor
+      let perubahanSuhu = (Math.random() - 0.5) * 0.3;
+      let perubahanHum = (Math.random() - 0.5) * 2;
+      let perubahanDimmer = (Math.random() - 0.5) * 8;
+      
+      let newSuhu = currentSuhu + perubahanSuhu;
+      let newHum = currentHum + perubahanHum;
+      let newDimmer = currentDimmer + perubahanDimmer;
+      
+      newSuhu = Math.min(38, Math.max(32, newSuhu));
+      newHum = Math.min(80, Math.max(40, newHum));
+      newDimmer = Math.min(100, Math.max(0, newDimmer));
+      
+      currentSuhu = newSuhu;
+      currentHum = newHum;
+      currentDimmer = newDimmer;
+      
+      updateDashboard(currentSuhu, currentHum, currentDimmer, currentRelay, simulasiSisa, 0, 0, "AKTIF");
+    }
+  }, 1000);
+}
+
+// Inisialisasi
 initChart();
 setInterval(updateRealTimeClock, 1000);
 updateRealTimeClock();
+updateDashboard(35.0, 51.0, 0, "OFF", 900, 15, 0, "AKTIF");
+
+setTimeout(() => {
+  if (!client.connected) {
+    fallbackSimulation();
+  }
+}, 4000);
