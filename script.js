@@ -15,9 +15,9 @@ let currentSuhu = 35.0;
 let currentHum = 51.0;
 let currentDimmer = 0;
 let currentRelay = "OFF";
-let currentSisa = 0;
-let currentMenit = 0;
-let currentDetik = 0;
+let currentSisaJam = 0;
+let currentSisaMenit = 0;
+let currentSisaDetik = 0;
 let currentProses = "AKTIF";
 
 // Data untuk grafik
@@ -44,6 +44,11 @@ const countdownTimerSpan = document.getElementById("countdownTimer");
 const maxTempSpan = document.getElementById("maxTemp");
 const minTempSpan = document.getElementById("minTemp");
 const avgTempSpan = document.getElementById("avgTemp");
+
+// Fungsi format waktu HH:MM:SS
+function formatTimeHHMMSS(jam, menit, detik) {
+  return `${String(jam).padStart(2, '0')}:${String(menit).padStart(2, '0')}:${String(detik).padStart(2, '0')}`;
+}
 
 // Inisialisasi grafik
 function initChart() {
@@ -211,33 +216,26 @@ function changeTimeRange(minutes) {
   updateTemperatureStats();
 }
 
-// Update countdown dari data ESP32
-function updateCountdown(sisaDetik, menit, detik, proses) {
+// Update countdown dari data ESP32 dengan format JAM:MENIT:DETIK
+function updateCountdown(jam, menit, detik, proses) {
   currentProses = proses;
   
-  if (proses === "SELESAI" || sisaDetik <= 0) {
+  if (proses === "SELESAI" || (jam === 0 && menit === 0 && detik === 0)) {
     faseTextSpan.innerHTML = `Fermentasi Selesai <i class="fas fa-check-circle"></i>`;
     faseTextSpan.style.color = "#4ade80";
-    countdownTimerSpan.innerHTML = "00:00";
+    countdownTimerSpan.innerHTML = "00:00:00";
     return;
   }
   
-  // Gunakan data menit dan detik dari ESP32
-  if (menit !== undefined && detik !== undefined) {
-    countdownTimerSpan.innerHTML = `${menit.toString().padStart(2, '0')}:${detik.toString().padStart(2, '0')}`;
-  } else {
-    // Fallback jika hanya sisa detik
-    const m = Math.floor(sisaDetik / 60);
-    const d = sisaDetik % 60;
-    countdownTimerSpan.innerHTML = `${m.toString().padStart(2, '0')}:${d.toString().padStart(2, '0')}`;
-  }
+  // Tampilkan dalam format HH:MM:SS
+  countdownTimerSpan.innerHTML = formatTimeHHMMSS(jam, menit, detik);
   
   faseTextSpan.innerHTML = `Fermentasi (Aktif) <i class="fas fa-seedling"></i>`;
   faseTextSpan.style.color = "";
 }
 
 // Fungsi update tampilan utama
-function updateDashboard(suhu, hum, dimmer, relay, sisa, menit, detik, proses) {
+function updateDashboard(suhu, hum, dimmer, relay, sisaJam, sisaMenit, sisaDetik, proses) {
   // Update suhu
   suhuSpan.innerText = suhu.toFixed(1);
   
@@ -299,8 +297,8 @@ function updateDashboard(suhu, hum, dimmer, relay, sisa, menit, detik, proses) {
     humidifierStateSpan.classList.remove("relay-on");
   }
   
-  // Update countdown timer
-  updateCountdown(sisa, menit, detik, proses);
+  // Update countdown timer dengan format JAM:MENIT:DETIK
+  updateCountdown(sisaJam, sisaMenit, sisaDetik, proses);
   
   // Tambahkan data ke grafik
   addDataToChart(suhu);
@@ -350,30 +348,34 @@ client.on("message", (topic, message) => {
     let hum = parseFloat(data.hum);
     let output = parseFloat(data.output);
     let relay = data.relay;
-    let sisa = parseInt(data.sisa);
-    let menit = parseInt(data.menit);
-    let detik = parseInt(data.detik);
-    let proses = data.proses;
+    
+    // Ambil data sisa waktu dalam format JAM, MENIT, DETIK dari ESP32
+    // Asumsikan ESP32 mengirim field: sisaJam, sisaMenit, sisaDetik
+    let sisaJam = parseInt(data.sisaJam) || parseInt(data.jam) || 0;
+    let sisaMenit = parseInt(data.sisaMenit) || parseInt(data.menit) || 0;
+    let sisaDetik = parseInt(data.sisaDetik) || parseInt(data.detik) || 0;
+    
+    let proses = data.proses || "AKTIF";
     
     // Validasi data
     if (!isNaN(suhu) && suhu >= 0 && suhu <= 60) currentSuhu = suhu;
     if (!isNaN(hum) && hum >= 0 && hum <= 100) currentHum = hum;
     if (!isNaN(output) && output >= 0 && output <= 100) currentDimmer = output;
     if (relay) currentRelay = relay;
-    if (!isNaN(sisa)) currentSisa = sisa;
-    if (!isNaN(menit)) currentMenit = menit;
-    if (!isNaN(detik)) currentDetik = detik;
+    if (!isNaN(sisaJam)) currentSisaJam = sisaJam;
+    if (!isNaN(sisaMenit)) currentSisaMenit = sisaMenit;
+    if (!isNaN(sisaDetik)) currentSisaDetik = sisaDetik;
     if (proses) currentProses = proses;
     
-    // Update dashboard
+    // Update dashboard dengan format JAM:MENIT:DETIK
     updateDashboard(
       currentSuhu, 
       currentHum, 
       currentDimmer, 
       currentRelay, 
-      currentSisa, 
-      currentMenit, 
-      currentDetik, 
+      currentSisaJam, 
+      currentSisaMenit, 
+      currentSisaDetik, 
       currentProses
     );
     
@@ -393,17 +395,18 @@ function relayOff() {
   console.log("Relay OFF command sent - Humidifier Mati");
 }
 
-// Fallback simulasi jika koneksi gagal
+// Fallback simulasi jika koneksi gagal (dengan format HH:MM:SS)
 function fallbackSimulation() {
-  let simulasiSisa = 900; // 15 menit simulasi
+  let simulasiSisa = 15 * 60; // 15 menit dalam detik
   setInterval(() => {
     if (!client.connected) {
-      // Simulasi countdown
+      // Simulasi countdown dengan format jam:menit:detik
       if (simulasiSisa > 0) {
         simulasiSisa--;
-        const m = Math.floor(simulasiSisa / 60);
+        const h = Math.floor(simulasiSisa / 3600);
+        const m = Math.floor((simulasiSisa % 3600) / 60);
         const d = simulasiSisa % 60;
-        updateCountdown(simulasiSisa, m, d, "AKTIF");
+        updateCountdown(h, m, d, "AKTIF");
       } else {
         updateCountdown(0, 0, 0, "SELESAI");
       }
@@ -425,7 +428,11 @@ function fallbackSimulation() {
       currentHum = newHum;
       currentDimmer = newDimmer;
       
-      updateDashboard(currentSuhu, currentHum, currentDimmer, currentRelay, simulasiSisa, 0, 0, "AKTIF");
+      // Update dashboard dengan format jam, menit, detik
+      const h = Math.floor(simulasiSisa / 3600);
+      const m = Math.floor((simulasiSisa % 3600) / 60);
+      const d = simulasiSisa % 60;
+      updateDashboard(currentSuhu, currentHum, currentDimmer, currentRelay, h, m, d, "AKTIF");
     }
   }, 1000);
 }
@@ -434,7 +441,8 @@ function fallbackSimulation() {
 initChart();
 setInterval(updateRealTimeClock, 1000);
 updateRealTimeClock();
-updateDashboard(35.0, 51.0, 0, "OFF", 900, 15, 0, "AKTIF");
+// Inisialisasi awal dengan 15 menit (00:15:00)
+updateDashboard(35.0, 51.0, 0, "OFF", 0, 15, 0, "AKTIF");
 
 setTimeout(() => {
   if (!client.connected) {
