@@ -2,13 +2,13 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TempeSmart - Monitoring Sistem Tempe</title>
 
 <!-- Font Awesome Icons -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 
-<!-- Chart.js untuk grafik -->
+<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <!-- MQTT Library -->
@@ -21,38 +21,38 @@
 
 <div class="dashboard">
   
-  <!-- Header Jam Real-Time & Waktu Proses -->
   <div class="header-time">
     <div class="jam-now">
       <i class="far fa-clock"></i> 
       <span id="liveDateTime">--, -- --- ---- --:--:--</span>
     </div>
     <div class="proses-info">
-      <div class="sensor-stable">
+      <div>
         <i class="fas fa-microchip"></i> All sensors stable
       </div>
       <div class="timer-countdown">
-        <i class="fas fa-hourglass-half"></i> Sisa Waktu Fermentasi: 
-        <span id="countdownTimer">--:--</span>
+        <i class="fas fa-hourglass-half"></i> Sisa Waktu: 
+        <span id="countdownTimer">00:00:00</span>
       </div>
-      <div class="fase-status">
+      <div class="waktu-proses">
+        <i class="fas fa-clock"></i> Waktu Berjalan: 
+        <span id="waktuProses">00:00:00</span>
+      </div>
+      <div>
         <i class="fas fa-charging-station"></i> Fase: 
         <span id="faseText">Fermentasi (Aktif)</span>
       </div>
     </div>
   </div>
 
-  <!-- Judul utama -->
   <div class="main-title">
     <i class="fas fa-seedling"></i> TempeSmart MONITORING SYSTEM
     <i class="fas fa-chart-line"></i>
   </div>
 
-  <!-- Grid utama monitoring -->
   <div class="grid-monitor">
     
-    <!-- CARD SUHU RUANG -->
-    <div class="card suhu-card">
+    <div class="card">
       <div class="card-header">
         <h3><i class="fas fa-thermometer-half"></i> SUHU RUANG</h3>
       </div>
@@ -60,16 +60,15 @@
         <span id="suhuValue">35.0</span><span class="unit-text"> °C</span>
       </div>
       <div class="status-row">
-        <span class="status-label">Status</span>
-        <span class="status-value" id="suhuStatus">Sesuai Setpoint</span>
+        <span>Status</span>
+        <span id="suhuStatus">Sesuai Setpoint</span>
       </div>
       <div class="temp-range">
-        <i class="fas fa-temperature-low"></i> 0° <i class="fas fa-arrow-right"></i> 35°C
+        <i class="fas fa-temperature-low"></i> 0° → 35°C
       </div>
     </div>
 
-    <!-- CARD KELEMBAPAN -->
-    <div class="card hum-card">
+    <div class="card">
       <div class="card-header">
         <h3><i class="fas fa-tint"></i> KELEMBAPAN</h3>
       </div>
@@ -77,13 +76,12 @@
         <span id="humValue">51</span><span class="unit-text"> %</span>
       </div>
       <div class="status-row">
-        <span class="status-label">Optimal</span>
-        <span class="status-value" id="humStatus">Kering</span>
+        <span>Optimal</span>
+        <span id="humStatus">Kering</span>
       </div>
     </div>
 
-    <!-- CARD DIMMER OUTPUT -->
-    <div class="card dimmer-card">
+    <div class="card">
       <div class="card-header">
         <h3><i class="fas fa-sliders-h"></i> DIMMER OUTPUT</h3>
       </div>
@@ -91,16 +89,15 @@
         <span id="dimmerValue">0</span><span class="unit-text"> %</span>
       </div>
       <div class="dimmer-bar-container">
-        <div class="dimmer-bar" id="dimmerBar" style="width: 0%;"></div>
+        <div class="dimmer-bar" id="dimmerBar"></div>
       </div>
       <div class="status-row">
-        <span class="status-label">Daya Pemanas</span>
-        <span class="status-value" id="dimmerStatus">Mati</span>
+        <span>Daya Pemanas</span>
+        <span id="dimmerStatus">Mati</span>
       </div>
     </div>
 
-    <!-- CARD STATUS RELAY (Hanya untuk Humidifier/KIPAS) -->
-    <div class="card relay-card">
+    <div class="card">
       <div class="card-header">
         <h3><i class="fas fa-plug"></i> STATUS RELAY</h3>
         <div class="online-badge" id="mqttStatus">
@@ -109,7 +106,7 @@
       </div>
       <div class="relay-single">
         <div class="relay-item">
-          <div class="relay-label"><i class="fas fa-tint"></i> Humidifier / KIPAS</div>
+          <div class="relay-label"><i class="fas fa-tint"></i> Humidifier</div>
           <div class="relay-state" id="humidifierState">OFF</div>
         </div>
       </div>
@@ -120,13 +117,11 @@
     </div>
   </div>
 
-  <!-- GRAFIK SUHU vs WAKTU REALTIME -->
   <div class="chart-card">
     <div class="chart-header">
-      <h3><i class="fas fa-chart-line"></i> GRAFIK SUHU vs WAKTU (REALTIME)</h3>
+      <h3><i class="fas fa-chart-line"></i> GRAFIK SUHU vs WAKTU</h3>
       <div class="chart-controls">
         <button class="chart-btn" onclick="changeTimeRange(60)">1 Jam</button>
-        <button class="chart-btn" onclick="changeTimeRange(120)">2 Jam</button>
         <button class="chart-btn active" onclick="changeTimeRange(360)">6 Jam</button>
         <button class="chart-btn" onclick="changeTimeRange(720)">12 Jam</button>
         <button class="chart-btn" onclick="changeTimeRange(1440)">24 Jam</button>
@@ -136,31 +131,26 @@
       <canvas id="temperatureChart"></canvas>
     </div>
     <div class="chart-stats">
-      <div class="stat-item">
-        <span class="stat-label">Suhu Maks:</span>
-        <span class="stat-value" id="maxTemp">--</span>
+      <div>
+        <div>Suhu Maks:</div>
+        <div id="maxTemp">--</div>
       </div>
-      <div class="stat-item">
-        <span class="stat-label">Suhu Min:</span>
-        <span class="stat-value" id="minTemp">--</span>
+      <div>
+        <div>Suhu Min:</div>
+        <div id="minTemp">--</div>
       </div>
-      <div class="stat-item">
-        <span class="stat-label">Suhu Rata-rata:</span>
-        <span class="stat-value" id="avgTemp">--</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Setpoint:</span>
-        <span class="stat-value">35°C</span>
+      <div>
+        <div>Suhu Rata-rata:</div>
+        <div id="avgTemp">--</div>
       </div>
     </div>
   </div>
 
   <div class="footer-note">
-    <i class="fas fa-microchip"></i> TempeSmart v2.0 • Monitoring Fermentasi Tempe • Data Real-time via MQTT
+    <i class="fas fa-microchip"></i> TempeSmart v2.0 • Monitoring Fermentasi Tempe
   </div>
 </div>
 
-<!-- JS External -->
 <script src="script.js"></script>
 </body>
 </html>
