@@ -15,22 +15,16 @@ let currentSuhu = 35.0;
 let currentHum = 51.0;
 let currentDimmer = 0;
 let currentRelay = "OFF";
-
-// Variabel untuk countdown dari ESP32
-let useESP32Countdown = false;
-let esp32RemainingSeconds = 0;
-let esp32TotalDuration = 1800 * 60; // Default 15 menit (900 detik)
+let currentSisa = 0;
+let currentMenit = 0;
+let currentDetik = 0;
+let currentProses = "AKTIF";
 
 // Data untuk grafik
 let timeLabels = [];
 let temperatureData = [];
 let dataTimestamps = [];
-let currentTimeRange = 60;
-
-// Countdown timer variables (local fallback)
-let fermentasiStartTime = null;
-let fermentasiDuration = 1800 * 60 * 1000; // 15 menit dalam milliseconds
-let countdownInterval = null;
+let currentTimeRange = 360; // menit, default 6 jam
 
 // Chart instance
 let temperatureChart = null;
@@ -160,6 +154,7 @@ function addDataToChart(suhu) {
   temperatureData.push(suhu);
   dataTimestamps.push(now.getTime());
   
+  // Hapus data yang lebih tua dari time range
   const cutoffTime = now.getTime() - (currentTimeRange * 60 * 1000);
   while (dataTimestamps.length > 0 && dataTimestamps[0] < cutoffTime) {
     timeLabels.shift();
@@ -167,10 +162,12 @@ function addDataToChart(suhu) {
     dataTimestamps.shift();
   }
   
+  // Update chart
   temperatureChart.data.labels = timeLabels;
   temperatureChart.data.datasets[0].data = temperatureData;
   temperatureChart.update();
   
+  // Update statistik
   updateTemperatureStats();
 }
 
@@ -178,6 +175,7 @@ function addDataToChart(suhu) {
 function changeTimeRange(minutes) {
   currentTimeRange = minutes;
   
+  // Update active button style
   const buttons = document.querySelectorAll('.chart-btn');
   buttons.forEach(btn => {
     btn.classList.remove('active');
@@ -186,6 +184,7 @@ function changeTimeRange(minutes) {
     event.target.classList.add('active');
   }
   
+  // Filter data berdasarkan range baru
   const now = Date.now();
   const cutoffTime = now - (currentTimeRange * 60 * 1000);
   
@@ -212,76 +211,45 @@ function changeTimeRange(minutes) {
   updateTemperatureStats();
 }
 
-// Update countdown dari ESP32
-function updateCountdownFromESP32(remainingSeconds, totalDurationSeconds = null) {
-  useESP32Countdown = true;
-  esp32RemainingSeconds = remainingSeconds;
+// Update countdown dari data ESP32
+function updateCountdown(sisaDetik, menit, detik, proses) {
+  currentProses = proses;
   
-  if (totalDurationSeconds) {
-    esp32TotalDuration = totalDurationSeconds;
-  }
-  
-  if (remainingSeconds <= 0) {
-    if (countdownInterval) clearInterval(countdownInterval);
+  if (proses === "SELESAI" || sisaDetik <= 0) {
     faseTextSpan.innerHTML = `Fermentasi Selesai <i class="fas fa-check-circle"></i>`;
     faseTextSpan.style.color = "#4ade80";
-    countdownTimerSpan.innerHTML = "00:00:00";
+    countdownTimerSpan.innerHTML = "00:00";
     return;
   }
   
-  // Hitung jam, menit, detik
-  const hours = Math.floor(remainingSeconds / 3600);
-  const minutes = Math.floor((remainingSeconds % 3600) / 60);
-  const seconds = remainingSeconds % 60;
-  
-  if (hours > 0) {
-    countdownTimerSpan.innerHTML = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  // Gunakan data menit dan detik dari ESP32
+  if (menit !== undefined && detik !== undefined) {
+    countdownTimerSpan.innerHTML = `${menit.toString().padStart(2, '0')}:${detik.toString().padStart(2, '0')}`;
   } else {
-    // Tampilkan menit:detik jika kurang dari 1 jam
-    countdownTimerSpan.innerHTML = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    // Fallback jika hanya sisa detik
+    const m = Math.floor(sisaDetik / 60);
+    const d = sisaDetik % 60;
+    countdownTimerSpan.innerHTML = `${m.toString().padStart(2, '0')}:${d.toString().padStart(2, '0')}`;
   }
   
   faseTextSpan.innerHTML = `Fermentasi (Aktif) <i class="fas fa-seedling"></i>`;
+  faseTextSpan.style.color = "";
 }
 
-// Start local countdown (fallback jika tidak ada data dari ESP32)
-function startLocalCountdown() {
-  if (countdownInterval) clearInterval(countdownInterval);
-  
-  countdownInterval = setInterval(() => {
-    if (!useESP32Countdown) {
-      const now = Date.now();
-      const elapsed = now - fermentasiStartTime;
-      let remaining = fermentasiDuration - elapsed;
-      
-      if (remaining <= 0) {
-        remaining = 0;
-        clearInterval(countdownInterval);
-        faseTextSpan.innerHTML = `Fermentasi Selesai <i class="fas fa-check-circle"></i>`;
-        faseTextSpan.style.color = "#4ade80";
-        countdownTimerSpan.innerHTML = "00:00";
-      } else {
-        faseTextSpan.innerHTML = `Fermentasi (Aktif) <i class="fas fa-seedling"></i>`;
-        faseTextSpan.style.color = "";
-        
-        const remainingSeconds = Math.floor(remaining / 1000);
-        const minutes = Math.floor(remainingSeconds / 60);
-        const seconds = remainingSeconds % 60;
-        countdownTimerSpan.innerHTML = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-      }
-    }
-  }, 1000);
-}
-
-// Fungsi update tampilan
-function updateDashboard(suhu, hum, dimmer, relay) {
+// Fungsi update tampilan utama
+function updateDashboard(suhu, hum, dimmer, relay, sisa, menit, detik, proses) {
+  // Update suhu
   suhuSpan.innerText = suhu.toFixed(1);
-  humSpan.innerText = Math.floor(hum);
-  dimmerSpan.innerText = Math.floor(dimmer);
   
+  // Update kelembapan
+  humSpan.innerText = Math.floor(hum);
+  
+  // Update dimmer
+  dimmerSpan.innerText = Math.floor(dimmer);
   const dimmerPercent = Math.min(100, Math.max(0, dimmer));
   dimmerBar.style.width = `${dimmerPercent}%`;
   
+  // Update status dimmer
   if (dimmerPercent === 0) {
     dimmerStatusSpan.innerText = "Mati";
     dimmerStatusSpan.style.color = "#f87171";
@@ -296,6 +264,7 @@ function updateDashboard(suhu, hum, dimmer, relay) {
     dimmerStatusSpan.style.color = "#f97316";
   }
 
+  // Update status suhu (setpoint 35°C)
   if (suhu >= 34.8 && suhu <= 35.2) {
     suhuStatusSpan.innerText = "Sesuai Setpoint";
     suhuStatusSpan.style.color = "#4ade80";
@@ -307,6 +276,7 @@ function updateDashboard(suhu, hum, dimmer, relay) {
     suhuStatusSpan.style.color = "#f97316";
   }
 
+  // Update status kelembapan
   if (hum >= 60 && hum <= 75) {
     humStatusSpan.innerText = "Optimal";
     humStatusSpan.style.color = "#4ade80";
@@ -318,6 +288,7 @@ function updateDashboard(suhu, hum, dimmer, relay) {
     humStatusSpan.style.color = "#f87171";
   }
 
+  // Update status relay Humidifier
   if (relay === "ON" || relay === true || relay === 1) {
     humidifierStateSpan.innerText = "ON";
     humidifierStateSpan.classList.add("relay-on");
@@ -328,6 +299,10 @@ function updateDashboard(suhu, hum, dimmer, relay) {
     humidifierStateSpan.classList.remove("relay-on");
   }
   
+  // Update countdown timer
+  updateCountdown(sisa, menit, detik, proses);
+  
+  // Tambahkan data ke grafik
   addDataToChart(suhu);
 }
 
@@ -355,15 +330,6 @@ client.on("connect", () => {
   client.subscribe("oven/data", (err) => {
     if (!err) console.log("Subscribe ke oven/data");
   });
-  
-  client.subscribe("oven/countdown", (err) => {
-    if (!err) console.log("Subscribe ke oven/countdown");
-  });
-  
-  // Subscribe untuk menerima durasi total fermentasi
-  client.subscribe("oven/duration", (err) => {
-    if (!err) console.log("Subscribe ke oven/duration");
-  });
 });
 
 client.on("error", (err) => {
@@ -375,42 +341,42 @@ client.on("error", (err) => {
 client.on("message", (topic, message) => {
   try {
     let payloadStr = message.toString();
+    console.log("Received:", payloadStr); // Untuk debugging
     
-    // Handle durasi total fermentasi dari ESP32
-    if (topic === "oven/duration") {
-      let durationSeconds = parseInt(payloadStr);
-      if (!isNaN(durationSeconds) && durationSeconds > 0) {
-        console.log("Durasi fermentasi dari ESP32:", durationSeconds, "detik");
-        esp32TotalDuration = durationSeconds;
-        fermentasiDuration = durationSeconds * 1000;
-      }
-      return;
-    }
-    
-    // Handle countdown data dari ESP32
-    if (topic === "oven/countdown") {
-      let remainingSeconds = parseInt(payloadStr);
-      if (!isNaN(remainingSeconds)) {
-        console.log("Countdown dari ESP32:", remainingSeconds, "detik");
-        updateCountdownFromESP32(remainingSeconds);
-      }
-      return;
-    }
-    
-    // Handle sensor data
     let data = JSON.parse(payloadStr);
     
-    let suhu = parseFloat(data.suhu || data.temperature || data.temp);
-    let hum = parseFloat(data.hum || data.humidity);
-    let dimmer = parseFloat(data.dimmer || data.output || data.pwm);
-    let relay = data.relay || currentRelay;
-
+    // Ambil data dari payload ESP32
+    let suhu = parseFloat(data.suhu);
+    let hum = parseFloat(data.hum);
+    let output = parseFloat(data.output);
+    let relay = data.relay;
+    let sisa = parseInt(data.sisa);
+    let menit = parseInt(data.menit);
+    let detik = parseInt(data.detik);
+    let proses = data.proses;
+    
+    // Validasi data
     if (!isNaN(suhu) && suhu >= 0 && suhu <= 60) currentSuhu = suhu;
     if (!isNaN(hum) && hum >= 0 && hum <= 100) currentHum = hum;
-    if (!isNaN(dimmer) && dimmer >= 0 && dimmer <= 100) currentDimmer = dimmer;
+    if (!isNaN(output) && output >= 0 && output <= 100) currentDimmer = output;
     if (relay) currentRelay = relay;
-
-    updateDashboard(currentSuhu, currentHum, currentDimmer, currentRelay);
+    if (!isNaN(sisa)) currentSisa = sisa;
+    if (!isNaN(menit)) currentMenit = menit;
+    if (!isNaN(detik)) currentDetik = detik;
+    if (proses) currentProses = proses;
+    
+    // Update dashboard
+    updateDashboard(
+      currentSuhu, 
+      currentHum, 
+      currentDimmer, 
+      currentRelay, 
+      currentSisa, 
+      currentMenit, 
+      currentDetik, 
+      currentProses
+    );
+    
   } catch (e) {
     console.warn("Parse error:", e);
   }
@@ -427,15 +393,19 @@ function relayOff() {
   console.log("Relay OFF command sent - Humidifier Mati");
 }
 
-// Fallback simulasi
+// Fallback simulasi jika koneksi gagal
 function fallbackSimulation() {
-  let simulasiRemaining = 15 * 60; // 15 menit simulasi
+  let simulasiSisa = 900; // 15 menit simulasi
   setInterval(() => {
     if (!client.connected) {
       // Simulasi countdown
-      if (simulasiRemaining > 0) {
-        simulasiRemaining--;
-        updateCountdownFromESP32(simulasiRemaining);
+      if (simulasiSisa > 0) {
+        simulasiSisa--;
+        const m = Math.floor(simulasiSisa / 60);
+        const d = simulasiSisa % 60;
+        updateCountdown(simulasiSisa, m, d, "AKTIF");
+      } else {
+        updateCountdown(0, 0, 0, "SELESAI");
       }
       
       // Simulasi sensor
@@ -455,7 +425,7 @@ function fallbackSimulation() {
       currentHum = newHum;
       currentDimmer = newDimmer;
       
-      updateDashboard(currentSuhu, currentHum, currentDimmer, currentRelay);
+      updateDashboard(currentSuhu, currentHum, currentDimmer, currentRelay, simulasiSisa, 0, 0, "AKTIF");
     }
   }, 1000);
 }
@@ -464,12 +434,7 @@ function fallbackSimulation() {
 initChart();
 setInterval(updateRealTimeClock, 1000);
 updateRealTimeClock();
-
-// Start local countdown sebagai fallback
-fermentasiStartTime = Date.now();
-startLocalCountdown();
-
-updateDashboard(35.0, 51.0, 0, "OFF");
+updateDashboard(35.0, 51.0, 0, "OFF", 900, 15, 0, "AKTIF");
 
 setTimeout(() => {
   if (!client.connected) {
